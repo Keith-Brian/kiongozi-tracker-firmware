@@ -12,6 +12,9 @@
 void connectToWiFi();
 void createJsonDoc (char*, size_t size);
 
+// creating objects for WiFi and HTTPClient
+HTTPClient http;
+
 void setup() {
   Serial.begin(115200);
   connectToWiFi();
@@ -21,6 +24,23 @@ void setup() {
   Serial.println("JSON Payload:");
   Serial.println(payLoad);
 
+  // Example of sending HTTP GET request
+  http.begin("http://jsonplaceholder.typicode.com/todos/1");
+  int httpResponseCode = http.GET();
+  Serial.print("HTTP Response code: ");
+  Serial.println(httpResponseCode);
+
+  // get the response payload
+  if (httpResponseCode > 0) { 
+    String response = http.getString();
+    Serial.println("Response payload:");
+    Serial.println(response);
+  } else {
+    Serial.print("Error on HTTP request: ");
+    Serial.println(httpResponseCode);
+  }
+  http.end(); // free resources
+
 }
 
 void loop() {
@@ -28,7 +48,6 @@ void loop() {
 }
 
 // creating a json document 
-
 void createJsonDoc (char* payLoad, size_t size) {
   JsonDocument doc;
 
