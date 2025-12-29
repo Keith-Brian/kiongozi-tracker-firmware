@@ -45,6 +45,8 @@ String tokenPostRequestResponse = "";
 
 void saveAuthToken(const char *generatedToken);
 { // saving the authToken to memory
+
+  //TODO: convert it from Char/String and store it;
   prefs.begin("auth", false);
   prefs.putString("token", userToken);
 }
@@ -68,13 +70,16 @@ void retrieveAuthToken()
   }
 }
 
-bool handShakeAuthentication(const char *url, const char *jsonPayLoad)
+bool handShakeAuthentication(const char *url)
 { // checks if the generated token is active
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Authorization", String("Bearer ") + userToken);
 
-  int httpResponseCode = http.POST((uint8_t *)jsonPayLoad, strlen(jsonPayLoad));
+  //TODO: Add a local JSON payload for authentication
+  char handShakePayLoad[100];
+
+  int httpResponseCode = http.POST((uint8_t *)handShakePayLoad, strlen(handShakePayLoad));
   Serial.print("HTTP handshake code: ");
   Serial.println(httpResponseCode);
 
