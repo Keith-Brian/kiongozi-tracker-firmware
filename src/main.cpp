@@ -22,7 +22,6 @@
   SOFTWARE.
 */
 
-
 // include the necessary Arduino libraries (Arduino framework)
 #include <Arduino.h>
 #include "secrets.h"
@@ -33,132 +32,106 @@
 
 // function prototypes
 void connectToWiFi();
-void createJsonDoc(char *, size_t size);
 void sendSimpleGetRequest();
-void deSerializeJsonResponse(const String Json);
 void sendSimplePostRequest(const char *url, const char *jsonPayload);
 
 // creating object instances
 HTTPClient http;
 Preferences prefs;
 
-
 String userToken = "";
 bool tokenAvailable = false;
 String tokenPostRequestResponse = "";
 
-
-void saveAuthToken (){ // saving the authToken to memory
+void saveAuthToken(const char *generatedToken);
+{ // saving the authToken to memory
   prefs.begin("auth", false);
-  prefs.putString("token",userToken);
+  prefs.putString("token", userToken);
 }
 
-
-void retrieveAuthToken () { // get the authToken from memory
+void retrieveAuthToken()
+{ // get the authToken from memory
   prefs.begin("auth", true);
   String storedToken = prefs.getString("token", "");
 
-  if(storedToken.length() > 0){
+  if (storedToken.length() > 0)
+  {
     userToken = storedToken;
     tokenAvailable = true;
-     Serial.print("Auth Token: ");
-     Serial.println(userToken);
-  }else{
+    Serial.print("Auth Token: ");
+    Serial.println(userToken);
+  }
+  else
+  {
     tokenAvailable = false;
     Serial.println("Error getting token");
   }
 }
 
-bool handShakeAuthentication (const char *url, const char *jsonPayLoad) { // checks if the generated token is active
+bool handShakeAuthentication(const char *url, const char *jsonPayLoad)
+{ // checks if the generated token is active
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Authorization", String("Bearer ") + userToken);
 
-  int httpResponseCode = http.POST((uint8_t *)jsonPayLoad,strlen(jsonPayLoad));
+  int httpResponseCode = http.POST((uint8_t *)jsonPayLoad, strlen(jsonPayLoad));
   Serial.print("HTTP handshake code: ");
   Serial.println(httpResponseCode);
 
-  if (httpResponseCode == 400 || httpResponseCode == 401){
+  if (httpResponseCode == 400 || httpResponseCode == 401)
+  {
     Serial.println("Invalid Token");
     return (httpResponseCode == 200);
-    //TODO: make a request to generate a new token 
-  } else if(httpResponseCode == 200){
+    // TODO: make a request to generate a new token
+  }
+  else if (httpResponseCode == 200)
+  {
     Serial.println("Valid Token Success");
     return (httpResponseCode == 200);
   }
 }
 
-void generateNewAuthenticationToken(){ // generate token based on deviceId and userId => stored in secrets
+bool generateNewAuthenticationToken()
+{ // generate token based on deviceId and userId => stored in secrets
+  JsonDocument doc;
 
-}
+  doc["device-id"] = DEVICE_ID;
+  doc["user-id"] = USER_ID;
 
+  char authPayLoad[100];
+  serializeJson(doc, authPayLoad, sizeof(authPayLoad));
 
-
-void sendSimplePostRequest(const char *url, const char *jsonPayload)
-{
-  http.begin(url);
+  http.begin("//auth-request"); // TODO: add the /endpoint
   http.addHeader("Content-Type", "application/json");
 
+  int httpAuthRequestResponseCode = http.POST((uint8_t *)authPayLoad, strlen(authPayLoad));
 
-  int httpResponseCode = http.POST((uint8_t *)jsonPayload, strlen(jsonPayload));
-
-  Serial.print("HTTP Response code: ");
-  Serial.println(httpResponseCode);
-
-  if (httpResponseCode > 0)
+  if (httpAuthRequestResponseCode == 200)
   {
-    String response = http.getString();
-    Serial.println("Response payload:");
-    Serial.println(response);
+    tokenPostRequestResponse = http.getString();
+    Serial.print("Token Generated");
+    Serial.println(tokenPostRequestResponse);
   }
-  else
-  {
-    Serial.print("Error on HTTP request: ");
-    Serial.println(httpResponseCode);
-  }
-  http.end(); // free resources
+
+  return (httpAuthRequestResponseCode == 200);
 }
 
-
-// Simple JSON deSerialization from the request
-void deSerializeJsonResponse(const String Json)
-{
+void extractAndSaveAuthenticationToken(){ // extract the authToken and save to memory 
   JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, Json);
-
-  if (error)
-  {
-    Serial.print("deserializeJson() failed: ");
+  DeserializationError error = deserializeJson(doc, tokenPostRequestResponse);
+  
+  if(error){
+    Serial.print("Token Extraction failed: ");
     Serial.println(error.c_str());
     return;
   }
 
-  const char *title = doc["title"];
-  bool completed = doc["completed"];
+  //extract and save it to the prefs library
+  const char *userToken = doc["token"];
 
-  Serial.print("Title: ");
-  Serial.println(title);
-  Serial.print("Completed: ");
- // Serial.println(completed ? "true" : "false");
+  //TODO: Save this to prefs memory 
+  
 }
-
-
-// creating a json document
-void createJsonDoc(char *payLoad, size_t size)
-{
-  JsonDocument doc;
-
-  doc["email"] = "devkaybee@gmail.com";
-  doc["password"] = "d3vkaybee";
-
-  serializeJsonPretty(doc, payLoad, size);
-
-  // to know exact size of json to be allocated
-  size_t jsonSize = measureJson(doc);
-  Serial.print("Measured JSON size: ");
-  Serial.println(jsonSize);
-}
-
 
 
 void setup()
@@ -175,8 +148,8 @@ void setup()
   sendSimplePostRequest("http://34.244.3.57:3000/api/auth/login", payLoad);
 
   // Example of sending HTTP GET request
-  //sendSimpleGetRequest();
-  //deSerializeJsonResponse(response);
+  // sendSimpleGetRequest();
+  // deSerializeJsonResponse(response);
 }
 
 void loop()
@@ -194,7 +167,7 @@ void sendSimpleGetRequest()
   // get the response payload
   if (httpResponseCode > 0)
   {
-    response = http.getString();
+    String response = http.getString();
     Serial.println("Response payload:");
     Serial.println(response);
   }
@@ -207,7 +180,6 @@ void sendSimpleGetRequest()
 }
 
 // making a simple POST request with JSON payload
-
 
 // configure WiFi connection using credentials from secrets.h
 void connectToWiFi()
