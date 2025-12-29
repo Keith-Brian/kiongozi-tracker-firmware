@@ -13,6 +13,7 @@ void connectToWiFi();
 void createJsonDoc(char *, size_t size);
 void sendSimpleGetRequest();
 void deSerializeJsonResponse(const String Json);
+void sendSimplePostRequest(const char *url, const char *jsonPayload);
 
 // creating objects for WiFi and HTTPClient
 HTTPClient http;
@@ -29,9 +30,12 @@ void setup()
   Serial.println("JSON Payload:");
   Serial.println(payLoad);
 
+  // sending a sample POST request
+  sendSimplePostRequest("http://34.244.3.57:3000/api/auth/login", payLoad);
+
   // Example of sending HTTP GET request
-  sendSimpleGetRequest();
-  deSerializeJsonResponse(response);
+  //sendSimpleGetRequest();
+  //deSerializeJsonResponse(response);
 }
 
 void loop()
@@ -41,7 +45,7 @@ void loop()
 // simple GET request example
 void sendSimpleGetRequest()
 {
-  http.begin("http://jsonplaceholder.typicode.com/todos/1");
+  http.begin("http://34.244.3.57:3000/api/devices/");
   int httpResponseCode = http.GET();
   Serial.print("HTTP Response code: ");
   Serial.println(httpResponseCode);
@@ -60,6 +64,34 @@ void sendSimpleGetRequest()
   }
   http.end(); // free resources
 }
+
+// making a simple POST request with JSON payload
+void sendSimplePostRequest(const char *url, const char *jsonPayload)
+{
+  http.begin(url);
+  http.addHeader("Content-Type", "application/json");
+
+
+
+  int httpResponseCode = http.POST((uint8_t *)jsonPayload, strlen(jsonPayload));
+
+  Serial.print("HTTP Response code: ");
+  Serial.println(httpResponseCode);
+
+  if (httpResponseCode > 0)
+  {
+    String response = http.getString();
+    Serial.println("Response payload:");
+    Serial.println(response);
+  }
+  else
+  {
+    Serial.print("Error on HTTP request: ");
+    Serial.println(httpResponseCode);
+  }
+  http.end(); // free resources
+}
+
 
 // Simple JSON deSerialization from the request
 void deSerializeJsonResponse(const String Json)
@@ -90,7 +122,7 @@ void createJsonDoc(char *payLoad, size_t size)
   JsonDocument doc;
 
   doc["email"] = "devkaybee@gmail.com";
-  doc["password"] = "d3kaybee";
+  doc["password"] = "d3vkaybee";
 
   serializeJsonPretty(doc, payLoad, size);
 
