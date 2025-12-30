@@ -234,11 +234,57 @@ bool readGPSLocation()
   return gpsFix;
 }
 
-// send a device heartbeat to the server
-void sendDeviceHeartbeat() {}
+// send gps data to the server
+void sendDeviceData(const char *payLoad) {
+  http.begin("http://34.244.3.57:3000/api/locations/updateLocation");
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("Authorization", String("Bearer ") + userToken);
 
-// send GPS data to the server
-void sendDeviceData() {}
+  //make a POST request with the payload
+  int httpResponseCode = http.POST((uint8_t *)payLoad, strlen(payLoad));
+
+  if (httpResponseCode > 0) {
+    Serial.print("HTTP Response code: ");
+    Serial.println(httpResponseCode);
+    String response = http.getString();
+    Serial.println("Response from server:");
+    Serial.println(response);
+  } else {
+    Serial.print("Error on sending POST: ");
+    Serial.println(httpResponseCode);
+  }
+
+  http.end(); // free resources
+}
+
+
+// send a device heartbeat to the server
+void sendDeviceHeartbeat() {
+  JsonDocument doc;
+
+  doc["deviceId"] = DEVICE_ID;
+  doc["status"] = "heartbeat";
+  doc["gpsFix"] = gpsFix; 
+
+  // Nested battery object
+  JsonObject battery = doc["battery"].to<JsonObject>();
+  battery["percent"] = battPercentage;
+  battery["voltage"] = battVoltage;
+  battery["charging"] = false;
+
+  doc["signal"] = -72;
+
+  char heartBeatPayLoad[200];
+  // Serialize JSON to string
+  serializeJsonPretty(doc, heartBeatPayLoad);
+
+  // upload the heartbeat data
+  sendDeviceData(heartBeatPayLoad);
+  delay(10000);
+
+}
+
+//upload device data to the server
 
 void initializeGPIO()
 {
@@ -341,17 +387,19 @@ void setup()
 
 void loop()
 {
-  bool gpsUpdate = false;
   // read data from the GPS module
   unsigned long currentMillis = millis();
   if (currentMillis - lastGPSUpdate >= gpsUpdateInterval)
   {
     lastGPSUpdate = currentMillis;
-    gpsUpdate = readGPSLocation();
+    gpsFix = readGPSLocation();
   }
 
   Serial.print("Device GPS Fix: ");
-  Serial.println(gpsUpdate);
+  Serial.println(gpsFix);
+
+  // send Device dataHeartbeat
+  sendDeviceHeartbeat();
 
   // check the device status
   checkDeviceStatus();
