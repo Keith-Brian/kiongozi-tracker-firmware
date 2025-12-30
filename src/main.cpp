@@ -45,7 +45,6 @@ unsigned long gpsUpdateInterval = 2000; // update GPS data every 2 seconds
 unsigned long lastBatteryReading = 0;        // for timing battery readings
 unsigned long batteryReadingInterval = 1000; // read battery status every 1 second
 
-
 // creating object instances
 HTTPClient http;
 Preferences prefs;
@@ -128,7 +127,6 @@ void connectToWiFi()
   }
 }
 
-
 bool handShakeAuthentication()
 { // checks if the generated token is active
   http.begin("http://34.244.3.57:3000/api/devices/handshake");
@@ -203,8 +201,9 @@ void extractAndSaveAuthenticationToken()
 
 // function to read the gps-data and device-status and send it to the server
 
-void readGPSLocation()
+bool readGPSLocation()
 {
+  bool gpsFix = false;
 
   while (gpsSerial.available() > 0)
   {
@@ -213,10 +212,7 @@ void readGPSLocation()
     // If a new GPS fix is available, print out some data
     if (gps.location.isUpdated())
     {
-
-      //update the gpsFix 
-      gpsFix = (gps.location.isValid());
-
+      gpsFix = true;
       // saving the location to the char arrays
       snprintf(gpsLatitude, sizeof(gpsLatitude), "%.6f", gps.location.lat());
       snprintf(gpsLongitude, sizeof(gpsLongitude), "%.6f", gps.location.lng());
@@ -233,12 +229,16 @@ void readGPSLocation()
 
       Serial.print("Speed= ");
       Serial.println(gpsSpeed); // speed in km/h
-
-      Serial.print("GPS fix ");
-      Serial.println(gpsFix);
     }
   }
+  return gpsFix;
 }
+
+// send a device heartbeat to the server
+void sendDeviceHeartbeat() {}
+
+// send GPS data to the server
+void sendDeviceData() {}
 
 void initializeGPIO()
 {
@@ -258,27 +258,27 @@ void initializeGPS()
 }
 
 // read the battery voltage
-float readBatteryVoltage (){
+float readBatteryVoltage()
+{
 
   uint32_t batterySampleReadings = 0;
   const uint8_t numSamples = 10;
 
-  for (uint8_t i = 0; i < numSamples; i++) {
+  for (uint8_t i = 0; i < numSamples; i++)
+  {
     batterySampleReadings += analogRead(BATTERY_VOLTAGE_PIN);
     delay(10); // small delay between samples
   }
 
   float averageBatteryAnalogValue = batterySampleReadings / (float)numSamples;
 
-  float batteryVoltage = (averageBatteryAnalogValue / 4095.0) * 3.3 * 2;   // assuming a voltage divider
+  float batteryVoltage = (averageBatteryAnalogValue / 4095.0) * 3.3 * 2; // assuming a voltage divider
   return batteryVoltage;
-
 }
 
+// send gps data to the server
 
-// send gps data to the server 
-
-// send device-heartbeat 
+// send device-heartbeat
 
 void checkDeviceStatus()
 {
@@ -296,7 +296,6 @@ void checkDeviceStatus()
 
   float batteryVoltage = readBatteryVoltage();
   int batteryPercentage = constrain((batteryVoltage / 4.2) * 100, 0, 100); // assuming 4.2V is full charge
-
 
   snprintf(battVoltage, sizeof(battVoltage), "%.2f", batteryVoltage);
   snprintf(battPercentage, sizeof(battPercentage), "%d", batteryPercentage);
@@ -340,17 +339,19 @@ void setup()
   }
 }
 
-
-
 void loop()
 {
+  bool gpsUpdate = false;
   // read data from the GPS module
   unsigned long currentMillis = millis();
   if (currentMillis - lastGPSUpdate >= gpsUpdateInterval)
   {
     lastGPSUpdate = currentMillis;
-    readGPSLocation();
+    gpsUpdate = readGPSLocation();
   }
+
+  Serial.print("Device GPS Fix: ");
+  Serial.println(gpsUpdate);
 
   // check the device status
   checkDeviceStatus();
