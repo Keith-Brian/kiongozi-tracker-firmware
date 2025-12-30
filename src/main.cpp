@@ -235,7 +235,7 @@ bool readGPSLocation()
 }
 
 // send gps data to the server
-void sendDeviceData(const char *payLoad) {
+bool sendDeviceData(const char *payLoad) {
   http.begin("http://34.244.3.57:3000/api/locations/updateLocation");
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Authorization", String("Bearer ") + userToken);
@@ -253,6 +253,8 @@ void sendDeviceData(const char *payLoad) {
     Serial.print("Error on sending POST: ");
     Serial.println(httpResponseCode);
   }
+
+  return (httpResponseCode == 200);
 
   http.end(); // free resources
 }
@@ -284,7 +286,44 @@ void sendDeviceHeartbeat() {
 
 }
 
-//upload device data to the server
+//upload full-device data to the server
+void updateLiveLocationData(){
+  
+  JsonDocument doc;
+
+  doc["deviceId"] = "glowTracker-002";
+  doc["userId"] = "694fe5b2cb29ca4da05724ea";
+
+  // Location object
+  JsonObject location = doc["location"].to<JsonObject>();
+  location["type"] = "Point";
+
+  // Coordinates array
+  JsonArray coordinates = location.createNestedArray("coordinates");
+  coordinates.add(gpsLongitude); // longitude first
+  coordinates.add(gpsLatitude);  // latitude second
+
+  // Other fields
+  doc["speed"] = 48.5;
+  doc["gpsFix"] = gpsFix;
+
+  // Battery object
+  JsonObject battery = doc["battery"].to<JsonObject>();
+  battery["percent"] = battPercentage;
+  battery["voltage"] = battVoltage;
+  battery["charging"] = false;
+
+  doc["signal"] = -72;
+
+  size_t jsonSize = measureJson(doc);
+
+  Serial.print("JSON Size: ");
+  Serial.println(jsonSize);
+
+  // Serialize to JSON
+  serializeJsonPretty(doc, Serial);
+  
+}
 
 void initializeGPIO()
 {
@@ -399,8 +438,11 @@ void loop()
   Serial.println(gpsFix);
 
   // send Device dataHeartbeat
-  sendDeviceHeartbeat();
+  //sendDeviceHeartbeat();
 
   // check the device status
   checkDeviceStatus();
+
+  // update the live-location data
+  updateLiveLocationData();
 }
