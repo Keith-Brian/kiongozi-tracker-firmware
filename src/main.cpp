@@ -43,12 +43,13 @@ String userToken = "";
 bool tokenAvailable = false;
 String tokenPostRequestResponse = "";
 
-void saveAuthToken(const char *generatedToken);
+void saveAuthToken(const char *generatedToken)
 { // saving the authToken to memory
 
-  //TODO: convert it from Char/String and store it;
+  // TODO: convert it from Char/String and store it;
   prefs.begin("auth", false);
-  prefs.putString("token", userToken);
+  prefs.putString("token", generatedToken);
+  prefs.end();
 }
 
 void retrieveAuthToken()
@@ -70,16 +71,16 @@ void retrieveAuthToken()
   }
 }
 
-bool handShakeAuthentication(const char *url)
+bool handShakeAuthentication()
 { // checks if the generated token is active
-  http.begin(url);
+  http.begin("http://34.244.3.57:3000/api/devices/handshake");
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Authorization", String("Bearer ") + userToken);
 
-  //TODO: Add a local JSON payload for authentication
+  // TODO: Add a local JSON payload for authentication
   char handShakePayLoad[100];
 
-  int httpResponseCode = http.POST((uint8_t *)handShakePayLoad, strlen(handShakePayLoad));
+  int httpResponseCode = http.GET();
   Serial.print("HTTP handshake code: ");
   Serial.println(httpResponseCode);
 
@@ -98,18 +99,11 @@ bool handShakeAuthentication(const char *url)
 
 bool generateNewAuthenticationToken()
 { // generate token based on deviceId and userId => stored in secrets
-  JsonDocument doc;
 
-  doc["device-id"] = DEVICE_ID;
-  doc["user-id"] = USER_ID;
-
-  char authPayLoad[100];
-  serializeJson(doc, authPayLoad, sizeof(authPayLoad));
-
-  http.begin("//auth-request"); // TODO: add the /endpoint
+  http.begin("http://34.244.3.57:3000/api/devices/token?deviceId=glowTracker-002"); // TODO: add the /endpoint
   http.addHeader("Content-Type", "application/json");
 
-  int httpAuthRequestResponseCode = http.POST((uint8_t *)authPayLoad, strlen(authPayLoad));
+  int httpAuthRequestResponseCode = http.GET();
 
   if (httpAuthRequestResponseCode == 200)
   {
@@ -117,44 +111,61 @@ bool generateNewAuthenticationToken()
     Serial.print("Token Generated");
     Serial.println(tokenPostRequestResponse);
   }
+  else
+  {
+    Serial.print("Error generating token: ");
+    Serial.println(httpAuthRequestResponseCode);
+    tokenPostRequestResponse = "";
+  }
 
   return (httpAuthRequestResponseCode == 200);
 }
 
-void extractAndSaveAuthenticationToken(){ // extract the authToken and save to memory 
+void extractAndSaveAuthenticationToken()
+{ // extract the authToken and save to memory
   JsonDocument doc;
   DeserializationError error = deserializeJson(doc, tokenPostRequestResponse);
-  
-  if(error){
+
+  if (error)
+  {
     Serial.print("Token Extraction failed: ");
     Serial.println(error.c_str());
     return;
   }
 
-  //extract and save it to the prefs library
+  // extract and save it to the prefs library
   const char *userToken = doc["token"];
-
-  //TODO: Save this to prefs memory 
-  
+  // save the token to memory
+  saveAuthToken(userToken);
 }
-
 
 void setup()
 {
   Serial.begin(115200);
   connectToWiFi();
-  // create a JSON buffer
-  char payLoad[100];
-  createJsonDoc(payLoad, sizeof(payLoad));
-  Serial.println("JSON Payload:");
-  Serial.println(payLoad);
 
-  // sending a sample POST request
-  sendSimplePostRequest("http://34.244.3.57:3000/api/auth/login", payLoad);
+  retrieveAuthToken();
 
-  // Example of sending HTTP GET request
-  // sendSimpleGetRequest();
-  // deSerializeJsonResponse(response);
+  if (handShakeAuthentication())
+  {
+    Serial.println("Token is valid, proceeding...");
+    retrieveAuthToken();
+  }
+  else
+  {
+    Serial.println("Token is invalid or not present, generating a new one...");
+
+    if (generateNewAuthenticationToken())
+    {
+      extractAndSaveAuthenticationToken();
+    }
+    else
+    {
+      Serial.println("Error doing that!");
+    }
+    // retrieve the saved token
+    retrieveAuthToken();
+  }
 }
 
 void loop()
