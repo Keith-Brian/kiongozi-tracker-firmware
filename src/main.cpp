@@ -32,6 +32,17 @@
 #include <TinyGPS++.h>
 #include <Preferences.h> // for storing WiFi credentials and configuration settings
 
+//declaring the various pins used for GPIO
+#define CAR_POWER_PIN 14
+#define BATTERY_VOLTAGE_PIN 34
+#define LED_INDICATOR_PIN 27
+#define BUZZER_PIN 15
+
+//declaring other variables
+unsigned long lastGPSUpdate = 0; // for timing
+unsigned long gpsUpdateInterval = 2000; // update GPS data every 2 seconds
+
+
 // function prototypes
 void connectToWiFi();
 void sendSimpleGetRequest();
@@ -48,9 +59,12 @@ String userToken = "";
 bool tokenAvailable = false;
 String tokenPostRequestResponse = "";
 
-String latitude = ""; // gonna change the strings to char arrays later
-String longitude = "";
 String messagePayload = "";
+
+char gpsLatitude[15];
+char gpsLongitude[15];
+char gpsAltitude[10];
+char gpsSpeed[10];
 
 void saveAuthToken(const char *generatedToken)
 { // saving the authToken to memory
@@ -158,20 +172,37 @@ void readGPSLocation(){
     
     // If a new GPS fix is available, print out some data
     if (gps.location.isUpdated()) {
+
+      // saving the location to the char arrays
+      snprintf(gpsLatitude, sizeof(gpsLatitude), "%.6f", gps.location.lat());
+      snprintf(gpsLongitude, sizeof(gpsLongitude), "%.6f", gps.location.lng());
+      snprintf(gpsAltitude, sizeof(gpsAltitude), "%.2f", gps.altitude.meters());
+      snprintf(gpsSpeed, sizeof(gpsSpeed), "%.2f", gps.speed.kmph ());
+
       Serial.print("Latitude= "); 
-      Serial.print(gps.location.lat(), 6); 
+      Serial.print(gpsLatitude); 
       Serial.print(" Longitude= "); 
-      Serial.println(gps.location.lng(), 6);
+      Serial.println(gpsLongitude);
       
       Serial.print("Altitude= ");
-      Serial.println(gps.altitude.meters());
+      Serial.println(gpsAltitude);
       
       Serial.print("Speed= ");
-      Serial.println(gps.speed.kmph());  // speed in km/h
+      Serial.println(gpsSpeed);  // speed in km/h
     }
   }
   
 }
+
+void initializeGPIO()
+{
+  pinMode(CAR_POWER_PIN, INPUT);
+  pinMode(BATTERY_VOLTAGE_PIN, INPUT);
+  pinMode(LED_INDICATOR_PIN, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+}
+
+// function to read the battery status 
 
 // setting up sensors and the modules
 void initializeGPS(){
@@ -179,17 +210,36 @@ void initializeGPS(){
   delay(1000); // wait for GPS module to initialize
 }
 
+void checkDeviceStatus(){
+  int carPowerStatus = digitalRead(CAR_POWER_PIN);
+  int batteryAnalogValue = analogRead(BATTERY_VOLTAGE_PIN);
+  // Add logic to handle the status readings
 
+  if(carPowerStatus == HIGH){
+    Serial.println("Car Power: ON");
+  } else {
+    Serial.println("Car Power: OFF");
+  }
 
+  float batteryVoltage = (batteryAnalogValue / 4095.0) * 3.3 * 2; // assuming a voltage divider
+  float batteryPercentage = constrain((batteryVoltage / 4.2) * 100, 0, 100); // assuming 4.2V is full charge
+  Serial.print("Battery Voltage: "); 
+  Serial.print(batteryVoltage);
+  Serial.println(" V");
+  Serial.print("Battery Percentage: "); 
+  Serial.print(batteryPercentage);  
+  Serial.println(" %");
+}
 
 
 void setup()
 {
   Serial.begin(115200);
-  connectToWiFi();
-  initializeGPS();
+  connectToWiFi(); // connect to WiFi network
+  initializeGPS(); // initialize the GPS module
+  initializeGPIO(); // initialize GPIO pins
 
-  retrieveAuthToken();
+  retrieveAuthToken(); // get the saved auth token
 
   if (handShakeAuthentication())
   {
@@ -216,9 +266,13 @@ void setup()
 void loop()
 {
   // read data from the GPS module
-  //Serial.println("Reading GPS Location...");
-  readGPSLocation();
-  delay(2000); // wait for 2 seconds before the next read
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastGPSUpdate >= gpsUpdateInterval) {
+    lastGPSUpdate = currentMillis;
+    readGPSLocation();
+  }
+  // check the device status
+  checkDeviceStatus();
 }
 
 // simple GET request example
