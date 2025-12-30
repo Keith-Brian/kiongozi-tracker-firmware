@@ -24,10 +24,12 @@
 
 // include the necessary Arduino libraries (Arduino framework)
 #include <Arduino.h>
+#include <HardwareSerial.h>
 #include "secrets.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <TinyGPS++.h>
 #include <Preferences.h> // for storing WiFi credentials and configuration settings
 
 // function prototypes
@@ -38,10 +40,17 @@ void sendSimplePostRequest(const char *url, const char *jsonPayload);
 // creating object instances
 HTTPClient http;
 Preferences prefs;
+HardwareSerial gpsSerial(1); // using UART1 for GPS module
+
+TinyGPSPlus gps;
 
 String userToken = "";
 bool tokenAvailable = false;
 String tokenPostRequestResponse = "";
+
+String latitude = ""; // gonna change the strings to char arrays later
+String longitude = "";
+String messagePayload = "";
 
 void saveAuthToken(const char *generatedToken)
 { // saving the authToken to memory
@@ -95,6 +104,7 @@ bool handShakeAuthentication()
     Serial.println("Valid Token Success");
     return (httpResponseCode == 200);
   }
+  return (httpResponseCode == 200);
 }
 
 bool generateNewAuthenticationToken()
@@ -139,10 +149,45 @@ void extractAndSaveAuthenticationToken()
   saveAuthToken(userToken);
 }
 
+//function to read the gps-data and device-status and send it to the server
+
+void readGPSLocation(){
+
+  while (gpsSerial.available() > 0) {
+    gps.encode(gpsSerial.read());
+    
+    // If a new GPS fix is available, print out some data
+    if (gps.location.isUpdated()) {
+      Serial.print("Latitude= "); 
+      Serial.print(gps.location.lat(), 6); 
+      Serial.print(" Longitude= "); 
+      Serial.println(gps.location.lng(), 6);
+      
+      Serial.print("Altitude= ");
+      Serial.println(gps.altitude.meters());
+      
+      Serial.print("Speed= ");
+      Serial.println(gps.speed.kmph());  // speed in km/h
+    }
+  }
+  
+}
+
+// setting up sensors and the modules
+void initializeGPS(){
+  gpsSerial.begin(9600, SERIAL_8N1, 13, 12); // RX, TX pins
+  delay(1000); // wait for GPS module to initialize
+}
+
+
+
+
+
 void setup()
 {
   Serial.begin(115200);
   connectToWiFi();
+  initializeGPS();
 
   retrieveAuthToken();
 
@@ -170,6 +215,10 @@ void setup()
 
 void loop()
 {
+  // read data from the GPS module
+  //Serial.println("Reading GPS Location...");
+  readGPSLocation();
+  delay(2000); // wait for 2 seconds before the next read
 }
 
 // simple GET request example
