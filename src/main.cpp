@@ -291,26 +291,25 @@ void updateLiveLocationData(){
   
   JsonDocument doc;
 
-  doc["deviceId"] = "glowTracker-002";
-  doc["userId"] = "694fe5b2cb29ca4da05724ea";
-
+  doc["deviceId"] = DEVICE_ID;
+  
   // Location object
   JsonObject location = doc["location"].to<JsonObject>();
   location["type"] = "Point";
 
   // Coordinates array
-  JsonArray coordinates = location.createNestedArray("coordinates");
-  coordinates.add(gpsLongitude); // longitude first
-  coordinates.add(gpsLatitude);  // latitude second
+  JsonArray coordinates = location["coordinates"].to<JsonArray>();
+  coordinates.add(atof(gpsLongitude)); // longitude first
+  coordinates.add(atof(gpsLatitude));  // latitude second
 
   // Other fields
-  doc["speed"] = 48.5;
+  doc["speed"] = atof(gpsSpeed);
   doc["gpsFix"] = gpsFix;
 
   // Battery object
   JsonObject battery = doc["battery"].to<JsonObject>();
-  battery["percent"] = battPercentage;
-  battery["voltage"] = battVoltage;
+  battery["percent"] = atof(battPercentage);
+  battery["voltage"] = atof(battVoltage);
   battery["charging"] = false;
 
   doc["signal"] = -72;
