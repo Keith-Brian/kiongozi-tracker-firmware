@@ -32,21 +32,19 @@
 #include <TinyGPS++.h>
 #include <Preferences.h> // for storing WiFi credentials and configuration settings
 
-//declaring the various pins used for GPIO
+// declaring the various pins used for GPIO
 #define CAR_POWER_PIN 14
 #define BATTERY_VOLTAGE_PIN 34
 #define LED_INDICATOR_PIN 27
 #define BUZZER_PIN 15
 
-//declaring other variables
-unsigned long lastGPSUpdate = 0; // for timing
+// declaring other variables
+unsigned long lastGPSUpdate = 0;        // for timing
 unsigned long gpsUpdateInterval = 2000; // update GPS data every 2 seconds
 
+unsigned long lastBatteryReading = 0;        // for timing battery readings
+unsigned long batteryReadingInterval = 1000; // read battery status every 1 second
 
-// function prototypes
-void connectToWiFi();
-void sendSimpleGetRequest();
-void sendSimplePostRequest(const char *url, const char *jsonPayload);
 
 // creating object instances
 HTTPClient http;
@@ -65,6 +63,11 @@ char gpsLatitude[15];
 char gpsLongitude[15];
 char gpsAltitude[10];
 char gpsSpeed[10];
+
+char battVoltage[8];
+char battPercentage[8];
+
+bool gpsFix = false;
 
 void saveAuthToken(const char *generatedToken)
 { // saving the authToken to memory
@@ -93,212 +96,6 @@ void retrieveAuthToken()
     Serial.println("Error getting token");
   }
 }
-
-bool handShakeAuthentication()
-{ // checks if the generated token is active
-  http.begin("http://34.244.3.57:3000/api/devices/handshake");
-  http.addHeader("Content-Type", "application/json");
-  http.addHeader("Authorization", String("Bearer ") + userToken);
-
-  // TODO: Add a local JSON payload for authentication
-  char handShakePayLoad[100];
-
-  int httpResponseCode = http.GET();
-  Serial.print("HTTP handshake code: ");
-  Serial.println(httpResponseCode);
-
-  if (httpResponseCode == 400 || httpResponseCode == 401)
-  {
-    Serial.println("Invalid Token");
-    return (httpResponseCode == 200);
-    // TODO: make a request to generate a new token
-  }
-  else if (httpResponseCode == 200)
-  {
-    Serial.println("Valid Token Success");
-    return (httpResponseCode == 200);
-  }
-  return (httpResponseCode == 200);
-}
-
-bool generateNewAuthenticationToken()
-{ // generate token based on deviceId and userId => stored in secrets
-
-  http.begin("http://34.244.3.57:3000/api/devices/token?deviceId=glowTracker-002"); // TODO: add the /endpoint
-  http.addHeader("Content-Type", "application/json");
-
-  int httpAuthRequestResponseCode = http.GET();
-
-  if (httpAuthRequestResponseCode == 200)
-  {
-    tokenPostRequestResponse = http.getString();
-    Serial.print("Token Generated");
-    Serial.println(tokenPostRequestResponse);
-  }
-  else
-  {
-    Serial.print("Error generating token: ");
-    Serial.println(httpAuthRequestResponseCode);
-    tokenPostRequestResponse = "";
-  }
-
-  return (httpAuthRequestResponseCode == 200);
-}
-
-void extractAndSaveAuthenticationToken()
-{ // extract the authToken and save to memory
-  JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, tokenPostRequestResponse);
-
-  if (error)
-  {
-    Serial.print("Token Extraction failed: ");
-    Serial.println(error.c_str());
-    return;
-  }
-
-  // extract and save it to the prefs library
-  const char *userToken = doc["token"];
-  // save the token to memory
-  saveAuthToken(userToken);
-}
-
-//function to read the gps-data and device-status and send it to the server
-
-void readGPSLocation(){
-
-  while (gpsSerial.available() > 0) {
-    gps.encode(gpsSerial.read());
-    
-    // If a new GPS fix is available, print out some data
-    if (gps.location.isUpdated()) {
-
-      // saving the location to the char arrays
-      snprintf(gpsLatitude, sizeof(gpsLatitude), "%.6f", gps.location.lat());
-      snprintf(gpsLongitude, sizeof(gpsLongitude), "%.6f", gps.location.lng());
-      snprintf(gpsAltitude, sizeof(gpsAltitude), "%.2f", gps.altitude.meters());
-      snprintf(gpsSpeed, sizeof(gpsSpeed), "%.2f", gps.speed.kmph ());
-
-      Serial.print("Latitude= "); 
-      Serial.print(gpsLatitude); 
-      Serial.print(" Longitude= "); 
-      Serial.println(gpsLongitude);
-      
-      Serial.print("Altitude= ");
-      Serial.println(gpsAltitude);
-      
-      Serial.print("Speed= ");
-      Serial.println(gpsSpeed);  // speed in km/h
-    }
-  }
-  
-}
-
-void initializeGPIO()
-{
-  pinMode(CAR_POWER_PIN, INPUT);
-  pinMode(BATTERY_VOLTAGE_PIN, INPUT);
-  pinMode(LED_INDICATOR_PIN, OUTPUT);
-  pinMode(BUZZER_PIN, OUTPUT);
-}
-
-// function to read the battery status 
-
-// setting up sensors and the modules
-void initializeGPS(){
-  gpsSerial.begin(9600, SERIAL_8N1, 13, 12); // RX, TX pins
-  delay(1000); // wait for GPS module to initialize
-}
-
-void checkDeviceStatus(){
-  int carPowerStatus = digitalRead(CAR_POWER_PIN);
-  int batteryAnalogValue = analogRead(BATTERY_VOLTAGE_PIN);
-  // Add logic to handle the status readings
-
-  if(carPowerStatus == HIGH){
-    Serial.println("Car Power: ON");
-  } else {
-    Serial.println("Car Power: OFF");
-  }
-
-  float batteryVoltage = (batteryAnalogValue / 4095.0) * 3.3 * 2; // assuming a voltage divider
-  float batteryPercentage = constrain((batteryVoltage / 4.2) * 100, 0, 100); // assuming 4.2V is full charge
-  Serial.print("Battery Voltage: "); 
-  Serial.print(batteryVoltage);
-  Serial.println(" V");
-  Serial.print("Battery Percentage: "); 
-  Serial.print(batteryPercentage);  
-  Serial.println(" %");
-}
-
-
-void setup()
-{
-  Serial.begin(115200);
-  connectToWiFi(); // connect to WiFi network
-  initializeGPS(); // initialize the GPS module
-  initializeGPIO(); // initialize GPIO pins
-
-  retrieveAuthToken(); // get the saved auth token
-
-  if (handShakeAuthentication())
-  {
-    Serial.println("Token is valid, proceeding...");
-    retrieveAuthToken();
-  }
-  else
-  {
-    Serial.println("Token is invalid or not present, generating a new one...");
-
-    if (generateNewAuthenticationToken())
-    {
-      extractAndSaveAuthenticationToken();
-    }
-    else
-    {
-      Serial.println("Error doing that!");
-    }
-    // retrieve the saved token
-    retrieveAuthToken();
-  }
-}
-
-void loop()
-{
-  // read data from the GPS module
-  unsigned long currentMillis = millis();
-  if (currentMillis - lastGPSUpdate >= gpsUpdateInterval) {
-    lastGPSUpdate = currentMillis;
-    readGPSLocation();
-  }
-  // check the device status
-  checkDeviceStatus();
-}
-
-// simple GET request example
-void sendSimpleGetRequest()
-{
-  http.begin("http://34.244.3.57:3000/api/devices/");
-  int httpResponseCode = http.GET();
-  Serial.print("HTTP Response code: ");
-  Serial.println(httpResponseCode);
-
-  // get the response payload
-  if (httpResponseCode > 0)
-  {
-    String response = http.getString();
-    Serial.println("Response payload:");
-    Serial.println(response);
-  }
-  else
-  {
-    Serial.print("Error on HTTP request: ");
-    Serial.println(httpResponseCode);
-  }
-  http.end(); // free resources
-}
-
-// making a simple POST request with JSON payload
 
 // configure WiFi connection using credentials from secrets.h
 void connectToWiFi()
@@ -329,4 +126,232 @@ void connectToWiFi()
   {
     Serial.println("\nFailed to connect to WiFi.");
   }
+}
+
+
+bool handShakeAuthentication()
+{ // checks if the generated token is active
+  http.begin("http://34.244.3.57:3000/api/devices/handshake");
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("Authorization", String("Bearer ") + userToken);
+
+  // TODO: Add a local JSON payload for authentication
+  char handShakePayLoad[100];
+
+  int httpResponseCode = http.GET();
+  Serial.print("HTTP handshake code: ");
+  Serial.println(httpResponseCode);
+
+  if (httpResponseCode == 400 || httpResponseCode == 401)
+  {
+    Serial.println("Invalid Token");
+    return (httpResponseCode == 200);
+    // TODO: make a request to generate a new token
+  }
+  else if (httpResponseCode == 200)
+  {
+    Serial.println("Valid Token Success");
+    return (httpResponseCode == 200);
+  }
+
+  http.end(); // free resources
+  return (httpResponseCode == 200);
+}
+
+bool generateNewAuthenticationToken()
+{ // generate token based on deviceId and userId => stored in secrets
+
+  http.begin("http://34.244.3.57:3000/api/devices/token?deviceId=glowTracker-002"); // TODO: add the /endpoint
+  http.addHeader("Content-Type", "application/json");
+
+  int httpAuthRequestResponseCode = http.GET();
+
+  if (httpAuthRequestResponseCode == 200)
+  {
+    tokenPostRequestResponse = http.getString();
+    Serial.print("Token Generated");
+    Serial.println(tokenPostRequestResponse);
+  }
+  else
+  {
+    Serial.print("Error generating token: ");
+    Serial.println(httpAuthRequestResponseCode);
+    tokenPostRequestResponse = "";
+  }
+
+  http.end(); // free resources
+  return (httpAuthRequestResponseCode == 200);
+}
+
+void extractAndSaveAuthenticationToken()
+{ // extract the authToken and save to memory
+  JsonDocument doc;
+  DeserializationError error = deserializeJson(doc, tokenPostRequestResponse);
+
+  if (error)
+  {
+    Serial.print("Token Extraction failed: ");
+    Serial.println(error.c_str());
+    return;
+  }
+
+  // extract and save it to the prefs library
+  const char *userToken = doc["token"];
+  // save the token to memory
+  saveAuthToken(userToken);
+}
+
+// function to read the gps-data and device-status and send it to the server
+
+void readGPSLocation()
+{
+
+  while (gpsSerial.available() > 0)
+  {
+    gps.encode(gpsSerial.read());
+
+    // If a new GPS fix is available, print out some data
+    if (gps.location.isUpdated())
+    {
+
+      //update the gpsFix 
+      gpsFix = (gps.location.isValid());
+
+      // saving the location to the char arrays
+      snprintf(gpsLatitude, sizeof(gpsLatitude), "%.6f", gps.location.lat());
+      snprintf(gpsLongitude, sizeof(gpsLongitude), "%.6f", gps.location.lng());
+      snprintf(gpsAltitude, sizeof(gpsAltitude), "%.2f", gps.altitude.meters());
+      snprintf(gpsSpeed, sizeof(gpsSpeed), "%.2f", gps.speed.kmph());
+
+      Serial.print("Latitude= ");
+      Serial.print(gpsLatitude);
+      Serial.print(" Longitude= ");
+      Serial.println(gpsLongitude);
+
+      Serial.print("Altitude= ");
+      Serial.println(gpsAltitude);
+
+      Serial.print("Speed= ");
+      Serial.println(gpsSpeed); // speed in km/h
+
+      Serial.print("GPS fix ");
+      Serial.println(gpsFix);
+    }
+  }
+}
+
+void initializeGPIO()
+{
+  pinMode(CAR_POWER_PIN, INPUT);
+  pinMode(BATTERY_VOLTAGE_PIN, INPUT);
+  pinMode(LED_INDICATOR_PIN, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+}
+
+// function to read the battery status
+
+// setting up sensors and the modules
+void initializeGPS()
+{
+  gpsSerial.begin(9600, SERIAL_8N1, 13, 12); // RX, TX pins
+  delay(1000);                               // wait for GPS module to initialize
+}
+
+// read the battery voltage
+float readBatteryVoltage (){
+
+  uint32_t batterySampleReadings = 0;
+  const uint8_t numSamples = 10;
+
+  for (uint8_t i = 0; i < numSamples; i++) {
+    batterySampleReadings += analogRead(BATTERY_VOLTAGE_PIN);
+    delay(10); // small delay between samples
+  }
+
+  float averageBatteryAnalogValue = batterySampleReadings / (float)numSamples;
+
+  float batteryVoltage = (averageBatteryAnalogValue / 4095.0) * 3.3 * 2;   // assuming a voltage divider
+  return batteryVoltage;
+
+}
+
+
+// send gps data to the server 
+
+// send device-heartbeat 
+
+void checkDeviceStatus()
+{
+  int carPowerStatus = digitalRead(CAR_POWER_PIN);
+  uint16_t batteryAnalogValue = analogRead(BATTERY_VOLTAGE_PIN); // assuming a voltage divider
+
+  if (carPowerStatus == HIGH)
+  {
+    Serial.println("Car Power: ON");
+  }
+  else
+  {
+    Serial.println("Car Power: OFF");
+  }
+
+  float batteryVoltage = readBatteryVoltage();
+  int batteryPercentage = constrain((batteryVoltage / 4.2) * 100, 0, 100); // assuming 4.2V is full charge
+
+
+  snprintf(battVoltage, sizeof(battVoltage), "%.2f", batteryVoltage);
+  snprintf(battPercentage, sizeof(battPercentage), "%d", batteryPercentage);
+
+  Serial.print("Battery Voltage: ");
+  Serial.print(battVoltage);
+  Serial.println(" V");
+  Serial.print("Battery Percentage: ");
+  Serial.print(battPercentage);
+  Serial.println(" %");
+}
+
+void setup()
+{
+  Serial.begin(115200);
+  connectToWiFi();  // connect to WiFi network
+  initializeGPS();  // initialize the GPS module
+  initializeGPIO(); // initialize GPIO pins
+
+  retrieveAuthToken(); // get the saved auth token
+
+  if (handShakeAuthentication())
+  {
+    Serial.println("Token is valid, proceeding...");
+    retrieveAuthToken();
+  }
+  else
+  {
+    Serial.println("Token is invalid or not present, generating a new one...");
+
+    if (generateNewAuthenticationToken())
+    {
+      extractAndSaveAuthenticationToken();
+    }
+    else
+    {
+      Serial.println("Error doing that!");
+    }
+    // retrieve the saved token
+    retrieveAuthToken();
+  }
+}
+
+
+
+void loop()
+{
+  // read data from the GPS module
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastGPSUpdate >= gpsUpdateInterval)
+  {
+    lastGPSUpdate = currentMillis;
+    readGPSLocation();
+  }
+
+  // check the device status
+  checkDeviceStatus();
 }
