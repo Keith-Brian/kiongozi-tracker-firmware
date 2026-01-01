@@ -194,9 +194,9 @@ void extractAndSaveAuthenticationToken()
   }
 
   // extract and save it to the prefs library
-  const char *userToken = doc["token"];
+  const char *newToken = doc["token"];
   // save the token to memory
-  saveAuthToken(userToken);
+  saveAuthToken(newToken);
 }
 
 // function to read the gps-data and device-status and send it to the server
@@ -254,9 +254,8 @@ bool sendDeviceData(const char *payLoad) {
     Serial.println(httpResponseCode);
   }
 
-  return (httpResponseCode == 200);
-
   http.end(); // free resources
+  return (httpResponseCode == 200);
 }
 
 
