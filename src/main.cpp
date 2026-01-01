@@ -27,7 +27,6 @@
 #include <HardwareSerial.h>
 #include "secrets.h"
 #include <WiFi.h>
-#include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <TinyGPS++.h>
 #include <Preferences.h> // for storing WiFi credentials and configuration settings
@@ -46,7 +45,6 @@ unsigned long lastBatteryReading = 0;        // for timing battery readings
 unsigned long batteryReadingInterval = 1000; // read battery status every 1 second
 
 // creating object instances
-HTTPClient http;
 Preferences prefs;
 HardwareSerial gpsSerial(1); // using UART1 for GPS module
 
@@ -54,9 +52,7 @@ TinyGPSPlus gps;
 
 String userToken = "";
 bool tokenAvailable = false;
-String tokenPostRequestResponse = "";
 
-String messagePayload = "";
 
 char gpsLatitude[15];
 char gpsLongitude[15];
@@ -127,64 +123,10 @@ void connectToWiFi()
   }
 }
 
-bool handShakeAuthentication()
-{ // checks if the generated token is active
-  http.begin("http://34.244.3.57:3000/api/devices/handshake");
-  http.addHeader("Content-Type", "application/json");
-  http.addHeader("Authorization", String("Bearer ") + userToken);
-
-  // TODO: Add a local JSON payload for authentication
-  char handShakePayLoad[100];
-
-  int httpResponseCode = http.GET();
-  Serial.print("HTTP handshake code: ");
-  Serial.println(httpResponseCode);
-
-  if (httpResponseCode == 400 || httpResponseCode == 401)
-  {
-    Serial.println("Invalid Token");
-    return (httpResponseCode == 200);
-    // TODO: make a request to generate a new token
-  }
-  else if (httpResponseCode == 200)
-  {
-    Serial.println("Valid Token Success");
-    return (httpResponseCode == 200);
-  }
-
-  http.end(); // free resources
-  return (httpResponseCode == 200);
-}
-
-bool generateNewAuthenticationToken()
-{ // generate token based on deviceId and userId => stored in secrets
-
-  http.begin("http://34.244.3.57:3000/api/devices/token?deviceId=glowTracker-002"); // TODO: add the /endpoint
-  http.addHeader("Content-Type", "application/json");
-
-  int httpAuthRequestResponseCode = http.GET();
-
-  if (httpAuthRequestResponseCode == 200)
-  {
-    tokenPostRequestResponse = http.getString();
-    Serial.print("Token Generated");
-    Serial.println(tokenPostRequestResponse);
-  }
-  else
-  {
-    Serial.print("Error generating token: ");
-    Serial.println(httpAuthRequestResponseCode);
-    tokenPostRequestResponse = "";
-  }
-
-  http.end(); // free resources
-  return (httpAuthRequestResponseCode == 200);
-}
-
 void extractAndSaveAuthenticationToken()
 { // extract the authToken and save to memory
   JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, tokenPostRequestResponse);
+  DeserializationError error = deserializeJson(doc, "");
 
   if (error)
   {
@@ -234,30 +176,6 @@ bool readGPSLocation()
   return gpsFix;
 }
 
-// send gps data to the server
-bool sendDeviceData(const char *payLoad) {
-  http.begin("http://34.244.3.57:3000/api/locations/updateLocation");
-  http.addHeader("Content-Type", "application/json");
-  http.addHeader("Authorization", String("Bearer ") + userToken);
-
-  //make a POST request with the payload
-  int httpResponseCode = http.POST((uint8_t *)payLoad, strlen(payLoad));
-
-  if (httpResponseCode > 0) {
-    Serial.print("HTTP Response code: ");
-    Serial.println(httpResponseCode);
-    String response = http.getString();
-    Serial.println("Response from server:");
-    Serial.println(response);
-  } else {
-    Serial.print("Error on sending POST: ");
-    Serial.println(httpResponseCode);
-  }
-
-  http.end(); // free resources
-  return (httpResponseCode == 200);
-}
-
 
 // send a device heartbeat to the server
 void sendDeviceHeartbeat() {
@@ -278,9 +196,6 @@ void sendDeviceHeartbeat() {
   char heartBeatPayLoad[200];
   // Serialize JSON to string
   serializeJsonPretty(doc, heartBeatPayLoad);
-
-  // upload the heartbeat data
-  sendDeviceData(heartBeatPayLoad);
   delay(10000);
 
 }
@@ -401,26 +316,6 @@ void setup()
 
   retrieveAuthToken(); // get the saved auth token
 
-  if (handShakeAuthentication())
-  {
-    Serial.println("Token is valid, proceeding...");
-    retrieveAuthToken();
-  }
-  else
-  {
-    Serial.println("Token is invalid or not present, generating a new one...");
-
-    if (generateNewAuthenticationToken())
-    {
-      extractAndSaveAuthenticationToken();
-    }
-    else
-    {
-      Serial.println("Error doing that!");
-    }
-    // retrieve the saved token
-    retrieveAuthToken();
-  }
 }
 
 void loop()
