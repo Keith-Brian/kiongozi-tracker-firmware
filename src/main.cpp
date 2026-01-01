@@ -103,7 +103,7 @@ void connectToWiFi()
   Serial.println(WIFI_SSID);
 
   uint8_t wifiConnectAttempts = 0;
-  const uint8_t maxAttempts = 20;
+  const uint8_t maxAttempts = 30;
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -132,9 +132,6 @@ bool handShakeAuthentication()
   http.begin("http://34.244.3.57:3000/api/devices/handshake");
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Authorization", String("Bearer ") + userToken);
-
-  // TODO: Add a local JSON payload for authentication
-  char handShakePayLoad[100];
 
   int httpResponseCode = http.GET();
   Serial.print("HTTP handshake code: ");
@@ -194,9 +191,9 @@ void extractAndSaveAuthenticationToken()
   }
 
   // extract and save it to the prefs library
-  const char *userToken = doc["token"];
+  const char *newToken = doc["token"];
   // save the token to memory
-  saveAuthToken(userToken);
+  saveAuthToken(newToken);
 }
 
 // function to read the gps-data and device-status and send it to the server
@@ -235,38 +232,41 @@ bool readGPSLocation()
 }
 
 // send gps data to the server
-bool sendDeviceData(const char *payLoad) {
+bool sendDeviceData(const char *payLoad)
+{
   http.begin("http://34.244.3.57:3000/api/locations/updateLocation");
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Authorization", String("Bearer ") + userToken);
 
-  //make a POST request with the payload
+  // make a POST request with the payload
   int httpResponseCode = http.POST((uint8_t *)payLoad, strlen(payLoad));
 
-  if (httpResponseCode > 0) {
+  if (httpResponseCode > 0)
+  {
     Serial.print("HTTP Response code: ");
     Serial.println(httpResponseCode);
     String response = http.getString();
     Serial.println("Response from server:");
     Serial.println(response);
-  } else {
+  }
+  else
+  {
     Serial.print("Error on sending POST: ");
     Serial.println(httpResponseCode);
   }
 
-  return (httpResponseCode == 200);
-
   http.end(); // free resources
+  return (httpResponseCode == 200);
 }
 
-
 // send a device heartbeat to the server
-void sendDeviceHeartbeat() {
+void sendDeviceHeartbeat()
+{
   JsonDocument doc;
 
   doc["deviceId"] = DEVICE_ID;
   doc["status"] = "heartbeat";
-  doc["gpsFix"] = gpsFix; 
+  doc["gpsFix"] = gpsFix;
 
   // Nested battery object
   JsonObject battery = doc["battery"].to<JsonObject>();
@@ -283,16 +283,16 @@ void sendDeviceHeartbeat() {
   // upload the heartbeat data
   sendDeviceData(heartBeatPayLoad);
   delay(10000);
-
 }
 
-//upload full-device data to the server
-void updateLiveLocationData(){
-  
+// upload full-device data to the server
+void updateLiveLocationData()
+{
+
   JsonDocument doc;
 
   doc["deviceId"] = DEVICE_ID;
-  
+
   // Location object
   JsonObject location = doc["location"].to<JsonObject>();
   location["type"] = "Point";
@@ -314,14 +314,12 @@ void updateLiveLocationData(){
 
   doc["signal"] = -72;
 
-  size_t jsonSize = measureJson(doc);
-
-  Serial.print("JSON Size: ");
-  Serial.println(jsonSize);
-
+  char liveLocationPayLoad[300];
   // Serialize to JSON
-  serializeJsonPretty(doc, Serial);
-  
+  serializeJsonPretty(doc, liveLocationPayLoad);
+  Serial.println("Live Location Payload:");
+  Serial.println(liveLocationPayLoad);
+  sendDeviceData(liveLocationPayLoad);
 }
 
 void initializeGPIO()
@@ -437,7 +435,7 @@ void loop()
   Serial.println(gpsFix);
 
   // send Device dataHeartbeat
-  //sendDeviceHeartbeat();
+  // sendDeviceHeartbeat();
 
   // check the device status
   checkDeviceStatus();
